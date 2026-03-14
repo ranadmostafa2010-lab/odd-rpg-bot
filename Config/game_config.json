@@ -1,3 +1,5 @@
+
+# config/game_config.json - THIS IS THE FILE YOU EDIT TO ADD/CHANGE CONTENT
 game_config_content = '''{
   "enemies": {
     "common": {
