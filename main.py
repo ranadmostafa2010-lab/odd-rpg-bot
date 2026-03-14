@@ -2,6 +2,7 @@ from flask import Flask, request
 import random
 import json
 import os
+import requests
 from datetime import datetime
 
 app = Flask(__name__)
@@ -36,59 +37,71 @@ def get_player(db, user):
 def home():
     return "ODD RPG Bot Online! 🎮"
 
-@app.route('/webhook', methods=['POST'])
+@app.route('/webhook', methods=['GET', 'POST'])
 def webhook():
-    data = request.json or {}
-    user = data.get('from', 'unknown')
-    msg = data.get('message', '').lower().strip()
-    db = load_db()
-    player = get_player(db, user)
+    # Handle CallMeBot (GET request)
+    if request.method == 'GET':
+        phone = request.args.get('phone', '')
+        message = request.args.get('text', '').lower().strip()
+        apikey = request.args.get('apikey', '')
+    else:
+        data = request.json or {}
+        phone = data.get('from', 'unknown')
+        message = data.get('message', '').lower().strip()
+        apikey = ''
     
-    if msg in ['menu', 'start', 'help']:
-        return {"reply": f"""🎮 *ODD RPG* 🪀
+    db = load_db()
+    player = get_player(db, phone)
+    
+    # MENU COMMAND
+    if message in ['menu', 'start', 'help']:
+        reply = f"""🎮 *ODD RPG* 🪀
 
 💰 Points: {player['points']}
 🏦 Bank: {player['bank']}
 ⚔️ Power: {player['power']}
 🎒 Pets: {len(player['pets'])}/10
 
-☞ *odd* - Battle
-☞ *crate* - Open crate
-☞ *inv* - Inventory
-☞ *shop* - Buy items
-☞ *bank* - Save money
+☞ *odd* - Battle enemy
+☞ *crate* - Open pet crate
+☞ *inv* - View inventory
+☞ *bank* - Save/withdraw
 ☞ *steal* - Steal points
-☞ *lb* - Leaderboard
-☞ *tutorial* - How to play"""}
+☞ *tutorial* - How to play"""
     
-    elif msg == 'odd':
+    # BATTLE COMMAND
+    elif message == 'odd':
         enemy_hp = random.randint(50, 150)
+        enemy_name = random.choice(["Goblin", "Orc", "Skeleton", "Wolf", "Troll"])
         player_dmg = random.randint(player['power'], player['power'] + 20)
         
         if player_dmg >= enemy_hp:
             reward = random.randint(100, 300)
             player['points'] += reward
             save_db(db)
-            return {"reply": f"""⚔️ *VICTORY!*
+            reply = f"""⚔️ *VICTORY!*
 
-💥 Damage: {player_dmg}
+Enemy: {enemy_name}
+💥 Your damage: {player_dmg}
 ❤️ Enemy HP: {enemy_hp}
 
 ✅ You won! +{reward}💰
-Total: {player['points']}💰"""}
+💰 Total: {player['points']}"""
         else:
             loss = random.randint(10, 50)
             player['points'] = max(0, player['points'] - loss)
             save_db(db)
-            return {"reply": f"""⚔️ *DEFEAT!*
+            reply = f"""⚔️ *DEFEAT!*
 
-💥 Damage: {player_dmg}
+Enemy: {enemy_name}
+💥 Your damage: {player_dmg}
 ❤️ Enemy HP: {enemy_hp}
 
 ❌ You lost! -{loss}💰
-Total: {player['points']}💰"""}
+💰 Total: {player['points']}"""
     
-    elif msg in ['crate', 'box']:
+    # CRATE COMMAND
+    elif message in ['crate', 'box']:
         roll = random.randint(1, 100)
         
         if roll >= 95:
@@ -111,7 +124,7 @@ Total: {player['points']}💰"""}
         player['points'] += bonus
         save_db(db)
         
-        return {"reply": f"""📦 *CRATE OPENED!*
+        reply = f"""📦 *CRATE OPENED!*
 
 🎲 Roll: {roll}
 {pet['rarity']}
@@ -119,109 +132,103 @@ Total: {player['points']}💰"""}
 ⚔️ ATK: {pet['atk']}
 
 💰 +{bonus} points!
-Pets: {len(player['pets'])}/10"""}
+🎒 Pets: {len(player['pets'])}/10
+💰 Total: {player['points']}"""
     
-    elif msg in ['inv', 'pets']:
+    # INVENTORY COMMAND
+    elif message in ['inv', 'inventory', 'pets']:
         if not player['pets']:
-            return {"reply": "🎒 Empty! Open *crate* to get pets."}
-        
-        pet_list = "\n".join([f"{i+1}. {p['rarity']} {p['name']}" 
-                             for i, p in enumerate(player['pets'])])
-        return {"reply": f"""🎒 *INVENTORY*
+            reply = "🎒 *INVENTORY*\n\nNo pets yet!\nSend *crate* to get one."
+        else:
+            pet_list = "\n".join([f"{i+1}. {p['rarity']} {p['name']} (ATK:{p['atk']})" 
+                                 for i, p in enumerate(player['pets'])])
+            reply = f"""🎒 *YOUR PETS*
 
 {pet_list}
 
-💰 {player['points']} | 🏦 {player['bank']} | ⚔️ {player['power']}"""}
+💰 {player['points']} | 🏦 {player['bank']} | ⚔️ {player['power']}"""
     
-    elif msg == 'shop':
-        return {"reply": """🏬 *SHOP*
-
-*buy potion* - 100💰
-*buy sword* - 500💰 (+5 Power)
-*buy shield* - 300💰"""}
-    
-    elif msg.startswith('buy '):
-        item = msg.replace('buy ', '')
-        if item == 'potion' and player['points'] >= 100:
-            player['points'] -= 100
-            player['inventory'].append('potion')
-            save_db(db)
-            return {"reply": "✅ Bought Potion! -100💰"}
-        elif item == 'sword' and player['points'] >= 500:
-            player['points'] -= 500
-            player['power'] += 5
-            save_db(db)
-            return {"reply": f"⚔️ Sword bought! Power: {player['power']}"}
-        return {"reply": "❌ Need more points!"}
-    
-    elif msg == 'bank':
-        return {"reply": f"""🏦 *BANK*
+    # BANK COMMAND
+    elif message == 'bank':
+        reply = f"""🏦 *BANK*
 
 Wallet: {player['points']}💰
-Savings: {player['bank']}💰 (Safe!)
+Savings: {player['bank']}💰 (Protected!)
 
+Send:
 *deposit [amount]*
-*withdraw [amount]*"""}
+*withdraw [amount]*"""
     
-    elif msg.startswith('deposit '):
+    # DEPOSIT
+    elif message.startswith('deposit '):
         try:
-            amt = int(msg.replace('deposit ', ''))
-            if amt <= player['points']:
+            amt = int(message.replace('deposit ', ''))
+            if amt <= player['points'] and amt > 0:
                 player['points'] -= amt
                 player['bank'] += amt
                 save_db(db)
-                return {"reply": f"✅ Deposited {amt}💰"}
+                reply = f"✅ Deposited {amt}💰 to bank!"
+            else:
+                reply = "❌ Not enough points!"
         except:
-            pass
-        return {"reply": "❌ Invalid amount!"}
+            reply = "❌ Use: deposit [number]"
     
-    elif msg.startswith('withdraw '):
+    # WITHDRAW
+    elif message.startswith('withdraw '):
         try:
-            amt = int(msg.replace('withdraw ', ''))
-            if amt <= player['bank']:
+            amt = int(message.replace('withdraw ', ''))
+            if amt <= player['bank'] and amt > 0:
                 player['bank'] -= amt
                 player['points'] += amt
                 save_db(db)
-                return {"reply": f"✅ Withdrew {amt}💰"}
+                reply = f"✅ Withdrew {amt}💰!"
+            else:
+                reply = "❌ Not enough in bank!"
         except:
-            pass
-        return {"reply": "❌ Not enough in bank!"}
+            reply = "❌ Use: withdraw [number]"
     
-    elif msg == 'steal':
-        return {"reply": "🥷 *STEAL*\n\nUse: *steal [number]*\n50% win chance!\nFail = -100💰"}
-    
-    elif msg.startswith('steal '):
+    # STEAL COMMAND
+    elif message == 'steal':
         if random.randint(1, 100) > 50:
             stolen = random.randint(50, 200)
             player['points'] += stolen
             save_db(db)
-            return {"reply": f"🥷 SUCCESS! +{stolen}💰"}
+            reply = f"🥷 *SUCCESS!* You stole {stolen}💰!"
         else:
             player['points'] = max(0, player['points'] - 100)
             save_db(db)
-            return {"reply": "🥷 CAUGHT! -100💰"}
+            reply = "🥷 *CAUGHT!* -100💰 fine!"
     
-    elif msg in ['lb', 'leaderboard']:
-        top = sorted(load_db().items(), 
-                    key=lambda x: x[1]['points']+x[1]['bank'], 
-                    reverse=True)[:5]
-        board = "\n".join([f"{i+1}. {n[:6]}... {d['points']+d['bank']}💰" 
-                          for i,(n,d) in enumerate(top)])
-        return {"reply": f"📋 *LEADERBOARD*\n\n{board}"}
-    
-    elif msg == 'tutorial':
-        return {"reply": """📖 *TUTORIAL*
+    # TUTORIAL
+    elif message == 'tutorial':
+        reply = """📖 *TUTORIAL*
 
-1. *menu* - Check status
-2. *odd* - Battle enemies
-3. *crate* - Get pets (gacha)
-4. *bank* - Protect points
-5. *steal* - Risk for reward
+1️⃣ Send *menu* - Check your stats
+2️⃣ Send *odd* - Battle enemies for points
+3️⃣ Send *crate* - Open crates to get pets
+4️⃣ Send *bank* - Deposit points (safe from steal!)
+5️⃣ Send *steal* - 50% chance to steal points
 
-💡 Bank = Safe from steal!"""}
+💡 *Tip:* Bank your points so thieves can't get them!
+
+Good luck! 🎮"""
     
+    # DEFAULT
     else:
-        return {"reply": "❓ Send *menu* for commands!"}
+        reply = "❓ Unknown command. Send *menu* for options!"
+    
+    # Send reply back to WhatsApp (for GET requests from CallMeBot)
+    if request.method == 'GET' and apikey:
+        phone_clean = phone.replace('+', '')
+        send_url = f"https://api.callmebot.com/whatsapp.php?phone={phone_clean}&text={requests.utils.quote(reply)}&apikey={apikey}"
+        try:
+            requests.get(send_url, timeout=10)
+        except:
+            pass
+        return "OK"
+    
+    # Return JSON for POST requests
+    return {"reply": reply}
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
