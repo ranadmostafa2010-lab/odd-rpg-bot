@@ -1,8 +1,7 @@
-from flask import Flask, request
+from flask import Flask, request, Response
 import random
 import json
 import os
-import requests
 from datetime import datetime
 
 app = Flask(__name__)
@@ -25,9 +24,7 @@ def get_player(db, user):
             "points": 1000,
             "bank": 0,
             "pets": [],
-            "inventory": [],
             "power": 10,
-            "last_steal": None,
             "joined": str(datetime.now())
         }
         save_db(db)
@@ -37,18 +34,10 @@ def get_player(db, user):
 def home():
     return "ODD RPG Bot Online! 🎮"
 
-@app.route('/webhook', methods=['GET', 'POST'])
+@app.route('/webhook', methods=['GET'])
 def webhook():
-    # Handle CallMeBot (GET request)
-    if request.method == 'GET':
-        phone = request.args.get('phone', '')
-        message = request.args.get('text', '').lower().strip()
-        apikey = request.args.get('apikey', '')
-    else:
-        data = request.json or {}
-        phone = data.get('from', 'unknown')
-        message = data.get('message', '').lower().strip()
-        apikey = ''
+    phone = request.args.get('phone', '')
+    message = request.args.get('text', '').lower().strip()
     
     db = load_db()
     player = get_player(db, phone)
@@ -217,18 +206,7 @@ Good luck! 🎮"""
     else:
         reply = "❓ Unknown command. Send *menu* for options!"
     
-    # Send reply back to WhatsApp (for GET requests from CallMeBot)
-    if request.method == 'GET' and apikey:
-        phone_clean = phone.replace('+', '')
-        send_url = f"https://api.callmebot.com/whatsapp.php?phone={phone_clean}&text={requests.utils.quote(reply)}&apikey={apikey}"
-        try:
-            requests.get(send_url, timeout=10)
-        except:
-            pass
-        return "OK"
-    
-    # Return JSON for POST requests
-    return {"reply": reply}
+    return Response(reply, mimetype='text/plain')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
