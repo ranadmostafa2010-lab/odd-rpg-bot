@@ -1,0 +1,30 @@
+
+# config/admin_config.json - YOUR PERSONAL CONFIG
+admin_config_content = '''{
+  "admin_phone": "201061479235",
+  "api_key": "2008805",
+  "bot_name": "ODD RPG Bot",
+  "version": "V. Re-Imagined Ultimate",
+  "admin_commands": {
+    "givepoints": {"description": "Give points to player", "syntax": "admin givepoints [phone] [amount]"},
+    "givepet": {"description": "Give specific pet to player", "syntax": "admin givepet [phone] [pet_name] [rarity]"},
+    "removepoints": {"description": "Remove points from player", "syntax": "admin removepoints [phone] [amount]"},
+    "ban": {"description": "Ban a player", "syntax": "admin ban [phone] [reason]"},
+    "unban": {"description": "Unban a player", "syntax": "admin unban [phone]"},
+    "broadcast": {"description": "Send message to all players", "syntax": "admin broadcast [message]"},
+    "maintenance": {"description": "Toggle maintenance mode", "syntax": "admin maintenance [on/off]"},
+    "reset": {"description": "Reset player data", "syntax": "admin reset [phone]"},
+    "addcode": {"description": "Add new promo code", "syntax": "admin addcode [code] [points] [uses]"},
+    "spawnboss": {"description": "Force spawn a boss", "syntax": "admin spawnboss [boss_name]"},
+    "giveitem": {"description": "Give shop item to player", "syntax": "admin giveitem [phone] [item_id] [quantity]"}
+  },
+  "maintenance_mode": false,
+  "banned_users": [],
+  "admin_logs": true
+}'''
+
+with open('config/admin_config.json', 'w') as f:
+    f.write(admin_config_content)
+
+print("✅ config/admin_config.json created!")
+print("🔐 This contains your admin settings and phone number")
